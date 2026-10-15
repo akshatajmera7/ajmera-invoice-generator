@@ -173,38 +173,62 @@ export default function App() {
     return taxable + gst;
   };
 
+  // Wait for an element to appear and have real layout dimensions
+  const waitForElement = (id, timeoutMs = 2500) => {
+    return new Promise((resolve, reject) => {
+      const start = Date.now();
+      const check = () => {
+        const el = document.getElementById(id);
+        if (el && el.offsetWidth > 0 && el.offsetHeight > 0) {
+          resolve(el);
+        } else if (Date.now() - start > timeoutMs) {
+          reject(new Error(`Element #${id} not ready after ${timeoutMs}ms`));
+        } else {
+          requestAnimationFrame(check);
+        }
+      };
+      check();
+    });
+  };
+
   // Generate PDF Blob
   const generatePdfBlob = async () => {
-    // If user is on editor tab, temporarily switch to preview so #invoice-sheet is in DOM
+    // If on editor tab, switch to preview so #invoice-sheet is rendered
     let switchedTab = false;
     if (activeTab !== 'preview') {
       setActiveTab('preview');
       switchedTab = true;
-      // Wait for React to render the preview tab
-      await new Promise((r) => setTimeout(r, 350));
     }
 
-    const invoiceEl = document.getElementById('invoice-sheet');
-    if (!invoiceEl) throw new Error('Invoice sheet element not found');
+    // Poll until #invoice-sheet has real dimensions (accounts for React render + layout)
+    let invoiceEl;
+    try {
+      invoiceEl = await waitForElement('invoice-sheet', 2500);
+    } catch (e) {
+      if (switchedTab) setActiveTab('editor');
+      throw new Error('Invoice preview not ready. Please switch to Preview tab and try again.');
+    }
 
-    // --- Neutralise all CSS zoom / transform so html2canvas sees the full-scale sheet ---
+    // Remove fit-mobile zoom class so html2canvas sees full-scale element
     const containerEl = invoiceEl.closest('.invoice-scale-container');
-
-    // Temporarily strip the fit-mobile class (which applies zoom via CSS)
     const hadFitMobile = containerEl && containerEl.classList.contains('fit-mobile');
     if (hadFitMobile) containerEl.classList.remove('fit-mobile');
 
-    // Also force inline zoom=1 to override any residual browser zoom
-    const originalZoom = invoiceEl.style.zoom;
-    const originalTransform = invoiceEl.style.transform;
+    // Override any inline zoom/transform
+    const origZoom = invoiceEl.style.zoom;
+    const origTransform = invoiceEl.style.transform;
     invoiceEl.style.zoom = '1';
     invoiceEl.style.transform = 'none';
 
-    // Give browser a moment to repaint at full scale before capture
-    await new Promise((r) => setTimeout(r, 100));
+    // One rAF to let browser reflow after zoom reset
+    await new Promise((r) => requestAnimationFrame(r));
+    await new Promise((r) => requestAnimationFrame(r));
 
     let canvas;
     try {
+      const w = invoiceEl.scrollWidth || invoiceEl.offsetWidth;
+      const h = invoiceEl.scrollHeight || invoiceEl.offsetHeight;
+
       canvas = await html2canvas(invoiceEl, {
         scale: 2,
         useCORS: true,
@@ -212,36 +236,38 @@ export default function App() {
         backgroundColor: '#ffffff',
         logging: false,
         scrollX: 0,
-        scrollY: -window.scrollY,
-        windowWidth: invoiceEl.scrollWidth,
-        windowHeight: invoiceEl.scrollHeight,
-        width: invoiceEl.scrollWidth,
-        height: invoiceEl.scrollHeight,
-        x: 0,
-        y: 0,
+        scrollY: 0,
+        width: w,
+        height: h,
+        windowWidth: w,
+        windowHeight: h,
       });
     } finally {
-      // Always restore original state
-      invoiceEl.style.zoom = originalZoom;
-      invoiceEl.style.transform = originalTransform;
-      if (hadFitMobile) containerEl.classList.add('fit-mobile');
+      // Always restore state no matter what
+      invoiceEl.style.zoom = origZoom;
+      invoiceEl.style.transform = origTransform;
+      if (hadFitMobile && containerEl) containerEl.classList.add('fit-mobile');
       if (switchedTab) setActiveTab('editor');
     }
 
-    const imgData = canvas.toDataURL('image/png');
-    const pdf = new jsPDF({
-      orientation: 'portrait',
-      unit: 'mm',
-      format: 'a4',
-    });
+    // Validate canvas before passing to jsPDF
+    if (!canvas || canvas.width === 0 || canvas.height === 0) {
+      throw new Error('Canvas capture returned empty. Please try again.');
+    }
 
-    const pdfWidth = 210;
-    const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+    const imgData = canvas.toDataURL('image/png');
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+    const pdfWidth = pdf.internal.pageSize.getWidth();   // 210mm
+    const pdfHeight = (canvas.height / canvas.width) * pdfWidth;
+
+    if (!isFinite(pdfHeight) || pdfHeight <= 0) {
+      throw new Error('Could not compute PDF page height. Please try again.');
+    }
 
     pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight, undefined, 'FAST');
 
-    const rawBlob = pdf.output('blob');
-    return new Blob([rawBlob], { type: 'application/pdf' });
+    return pdf.output('blob');
   };
 
   // Download PDF
