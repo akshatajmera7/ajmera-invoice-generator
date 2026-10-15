@@ -175,26 +175,60 @@ export default function App() {
 
   // Generate PDF Blob
   const generatePdfBlob = async () => {
+    // If user is on editor tab, temporarily switch to preview so #invoice-sheet is in DOM
+    let switchedTab = false;
+    if (activeTab !== 'preview') {
+      setActiveTab('preview');
+      switchedTab = true;
+      // Wait for React to render the preview tab
+      await new Promise((r) => setTimeout(r, 350));
+    }
+
     const invoiceEl = document.getElementById('invoice-sheet');
     if (!invoiceEl) throw new Error('Invoice sheet element not found');
 
+    // --- Neutralise all CSS zoom / transform so html2canvas sees the full-scale sheet ---
+    const containerEl = invoiceEl.closest('.invoice-scale-container');
+
+    // Temporarily strip the fit-mobile class (which applies zoom via CSS)
+    const hadFitMobile = containerEl && containerEl.classList.contains('fit-mobile');
+    if (hadFitMobile) containerEl.classList.remove('fit-mobile');
+
+    // Also force inline zoom=1 to override any residual browser zoom
+    const originalZoom = invoiceEl.style.zoom;
     const originalTransform = invoiceEl.style.transform;
+    invoiceEl.style.zoom = '1';
     invoiceEl.style.transform = 'none';
 
-    const canvas = await html2canvas(invoiceEl, {
-      scale: 2.5,
-      useCORS: true,
-      allowTaint: true,
-      backgroundColor: '#ffffff',
-      logging: false,
-      scrollX: 0,
-      scrollY: 0,
-      windowWidth: 1024,
-    });
+    // Give browser a moment to repaint at full scale before capture
+    await new Promise((r) => setTimeout(r, 100));
 
-    invoiceEl.style.transform = originalTransform;
+    let canvas;
+    try {
+      canvas = await html2canvas(invoiceEl, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+        scrollX: 0,
+        scrollY: -window.scrollY,
+        windowWidth: invoiceEl.scrollWidth,
+        windowHeight: invoiceEl.scrollHeight,
+        width: invoiceEl.scrollWidth,
+        height: invoiceEl.scrollHeight,
+        x: 0,
+        y: 0,
+      });
+    } finally {
+      // Always restore original state
+      invoiceEl.style.zoom = originalZoom;
+      invoiceEl.style.transform = originalTransform;
+      if (hadFitMobile) containerEl.classList.add('fit-mobile');
+      if (switchedTab) setActiveTab('editor');
+    }
 
-    const imgData = canvas.toDataURL('image/jpeg', 0.98);
+    const imgData = canvas.toDataURL('image/png');
     const pdf = new jsPDF({
       orientation: 'portrait',
       unit: 'mm',
@@ -204,7 +238,7 @@ export default function App() {
     const pdfWidth = 210;
     const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
 
-    pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight, undefined, 'FAST');
+    pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight, undefined, 'FAST');
 
     const rawBlob = pdf.output('blob');
     return new Blob([rawBlob], { type: 'application/pdf' });
