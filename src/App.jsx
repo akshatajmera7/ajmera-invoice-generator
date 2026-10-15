@@ -186,108 +186,73 @@ export default function App() {
     return taxable + gst;
   };
 
-  // Wait for an element to appear and have real layout dimensions
-  const waitForElement = (id, timeoutMs = 2500) => {
-    return new Promise((resolve, reject) => {
-      const start = Date.now();
-      const check = () => {
-        const el = document.getElementById(id);
-        if (el && el.offsetWidth > 0 && el.offsetHeight > 0) {
-          resolve(el);
-        } else if (Date.now() - start > timeoutMs) {
-          reject(new Error(`Element #${id} not ready after ${timeoutMs}ms`));
-        } else {
-          requestAnimationFrame(check);
-        }
-      };
-      check();
-    });
-  };
-
-  // Generate PDF Blob
-  const generatePdfBlob = async () => {
-    // If on editor tab, switch to preview so #invoice-sheet is rendered
-    let switchedTab = false;
-    if (activeTab !== 'preview') {
-      setActiveTab('preview');
-      switchedTab = true;
+  // Generate pristine A4 PDF object using dedicated offscreen capture vault
+  const generatePdf = async () => {
+    // 1. Get the dedicated offscreen A4 capture sheet
+    const captureSheet = document.getElementById('invoice-sheet-capture');
+    if (!captureSheet) {
+      throw new Error('Invoice capture container not ready. Please try again.');
     }
 
-    // Poll until #invoice-sheet has real dimensions (accounts for React render + layout)
-    let invoiceEl;
-    try {
-      invoiceEl = await waitForElement('invoice-sheet', 2500);
-    } catch (e) {
-      if (switchedTab) setActiveTab('editor');
-      throw new Error('Invoice preview not ready. Please switch to Preview tab and try again.');
-    }
-
-    // Remove fit-mobile zoom class so html2canvas sees full-scale element
-    const containerEl = invoiceEl.closest('.invoice-scale-container');
-    const hadFitMobile = containerEl && containerEl.classList.contains('fit-mobile');
-    if (hadFitMobile) containerEl.classList.remove('fit-mobile');
-
-    // Override any inline zoom/transform
-    const origZoom = invoiceEl.style.zoom;
-    const origTransform = invoiceEl.style.transform;
-    invoiceEl.style.zoom = '1';
-    invoiceEl.style.transform = 'none';
-
-    // One rAF to let browser reflow after zoom reset
-    await new Promise((r) => requestAnimationFrame(r));
-    await new Promise((r) => requestAnimationFrame(r));
-
-    let canvas;
-    try {
-      const w = invoiceEl.scrollWidth || invoiceEl.offsetWidth;
-      const h = invoiceEl.scrollHeight || invoiceEl.offsetHeight;
-
-      canvas = await html2canvas(invoiceEl, {
-        scale: 2,
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: '#ffffff',
-        logging: false,
-        scrollX: 0,
-        scrollY: 0,
-        width: w,
-        height: h,
-        windowWidth: w,
-        windowHeight: h,
+    // 2. Ensure firm logo image is loaded if present
+    const logoImg = captureSheet.querySelector('.invoice-firm-logo');
+    if (logoImg && !logoImg.complete) {
+      await new Promise((resolve) => {
+        logoImg.onload = resolve;
+        logoImg.onerror = resolve;
       });
-    } finally {
-      // Always restore state no matter what
-      invoiceEl.style.zoom = origZoom;
-      invoiceEl.style.transform = origTransform;
-      if (hadFitMobile && containerEl) containerEl.classList.add('fit-mobile');
-      if (switchedTab) setActiveTab('editor');
     }
 
-    // Validate canvas before passing to jsPDF
+    // Brief rAF to ensure complete font and layout settling
+    await new Promise((r) => requestAnimationFrame(r));
+
+    // 3. Capture high-res canvas at exactly standard A4 width (794px at 96 DPI)
+    const targetWidth = 794;
+    const targetHeight = captureSheet.scrollHeight || captureSheet.offsetHeight || 1123;
+
+    const canvas = await html2canvas(captureSheet, {
+      scale: 2,
+      useCORS: true,
+      allowTaint: true,
+      backgroundColor: '#ffffff',
+      logging: false,
+      scrollX: 0,
+      scrollY: 0,
+      x: 0,
+      y: 0,
+      width: targetWidth,
+      height: targetHeight,
+      windowWidth: targetWidth,
+      windowHeight: targetHeight,
+    });
+
     if (!canvas || canvas.width === 0 || canvas.height === 0) {
       throw new Error('Canvas capture returned empty. Please try again.');
     }
 
+    // 4. Construct A4 PDF with jsPDF
     const imgData = canvas.toDataURL('image/png');
     const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
-    const pdfWidth = pdf.internal.pageSize.getWidth();   // 210mm
+    const pdfWidth = pdf.internal.pageSize.getWidth(); // 210mm
     const pdfHeight = (canvas.height / canvas.width) * pdfWidth;
 
     if (!isFinite(pdfHeight) || pdfHeight <= 0) {
-      throw new Error('Could not compute PDF page height. Please try again.');
+      throw new Error('Could not compute PDF dimensions. Please try again.');
     }
 
     pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight, undefined, 'FAST');
-
-    return pdf.output('blob');
+    return pdf;
   };
 
-  // Increment bill number after finalising a bill
+  // Increment bill number after finalising a bill (only if a valid numeric bill number was provided)
   const incrementBillNumber = () => {
-    const next = (invoiceData.billNumber || STARTING_BILL_NUMBER) + 1;
+    if (!invoiceData.billNumber && invoiceData.billNumber !== 0) return;
+    const num = parseInt(invoiceData.billNumber, 10);
+    if (isNaN(num)) return;
+    const next = num + 1;
     try {
-      localStorage.setItem('ajmera_last_bill_number', String(invoiceData.billNumber || STARTING_BILL_NUMBER));
+      localStorage.setItem('ajmera_last_bill_number', String(num));
     } catch { /* ignore */ }
     saveState({ ...invoiceData, billNumber: next });
   };
@@ -299,23 +264,15 @@ export default function App() {
       setProcessAction('download');
       showToast('Generating official PDF file...');
 
-      const blob = await generatePdfBlob();
-      const blobUrl = URL.createObjectURL(blob);
-      const fileName = `Ramswaroop_Nirmal_Kumar_Ajmera_Tax_Invoice_${invoiceData.invoiceDate || 'bill'}.pdf`;
+      const pdf = await generatePdf();
+      const billSuffix = invoiceData.billNumber ? `_Bill_${invoiceData.billNumber}` : '';
+      const dateSuffix = invoiceData.invoiceDate ? `_${invoiceData.invoiceDate}` : '';
+      const fileName = `Ramswaroop_Nirmal_Kumar_Ajmera_Tax_Invoice${billSuffix}${dateSuffix}.pdf`;
 
-      const downloadLink = document.createElement('a');
-      downloadLink.href = blobUrl;
-      downloadLink.download = fileName;
-      downloadLink.setAttribute('target', '_blank');
-      document.body.appendChild(downloadLink);
-      downloadLink.click();
+      // Save PDF directly with native save dialog
+      pdf.save(fileName);
 
-      setTimeout(() => {
-        document.body.removeChild(downloadLink);
-        URL.revokeObjectURL(blobUrl);
-      }, 3000);
-
-      showToast(`Downloaded — Bill #${invoiceData.billNumber}`);
+      showToast(invoiceData.billNumber ? `Downloaded — Bill #${invoiceData.billNumber}` : 'Downloaded PDF successfully');
       incrementBillNumber();
     } catch (err) {
       console.error('PDF error:', err);
@@ -333,11 +290,15 @@ export default function App() {
       setProcessAction('share');
       showToast('Preparing PDF for sharing...');
 
-      const blob = await generatePdfBlob();
-      const fileName = `Tax_Invoice_${invoiceData.customer.name ? invoiceData.customer.name.replace(/[^a-zA-Z0-9]/g, '_') : 'Ajmera'}.pdf`;
+      const pdf = await generatePdf();
+      const billSuffix = invoiceData.billNumber ? `_Bill_${invoiceData.billNumber}` : '';
+      const custSuffix = invoiceData.customer.name ? `_${invoiceData.customer.name.replace(/[^a-zA-Z0-9]/g, '_')}` : '';
+      const fileName = `Tax_Invoice${custSuffix}${billSuffix}.pdf`;
+
+      const blob = pdf.output('blob');
       const file = new File([blob], fileName, { type: 'application/pdf' });
 
-      // Check if native Web Share API supports file sharing (works on Android Chrome, iOS Safari, mobile browsers)
+      // Check if native Web Share API supports file sharing (works on Android Chrome, iOS Safari)
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({
           files: [file],
@@ -347,20 +308,8 @@ export default function App() {
         showToast('Shared successfully!');
         incrementBillNumber();
       } else {
-        // Fallback for browsers that don't support direct file sharing via navigator:
-        // 1. Trigger the download so user has the file
-        const blobUrl = URL.createObjectURL(blob);
-        const downloadLink = document.createElement('a');
-        downloadLink.href = blobUrl;
-        downloadLink.download = fileName;
-        document.body.appendChild(downloadLink);
-        downloadLink.click();
-        setTimeout(() => {
-          document.body.removeChild(downloadLink);
-          URL.revokeObjectURL(blobUrl);
-        }, 3000);
-
-        // 2. Open the Share modal for WhatsApp / Email / Copy summary
+        // Fallback for browsers that don't support direct file sharing via navigator
+        pdf.save(fileName);
         setShowShareModal(true);
       }
     } catch (err) {
@@ -377,7 +326,8 @@ export default function App() {
 
   const getShareText = () => {
     const total = calculateTotal();
-    return `*TAX INVOICE - RAMSWAROOP NIRMAL KUMAR AJMERA*\nSadar Bazar, Banera (Rajasthan)\nGSTIN: 08ACZPA7669Q1ZC\n\n*Bill To:* ${invoiceData.customer.name || 'Customer'}\n*Date:* ${invoiceData.invoiceDate}\n*Total Amount:* ₹${formatCurrency(total)}\n\n*Bank Details:*\nBank: ${invoiceData.bankDetails.bankName}\nA/C: ${invoiceData.bankDetails.accountNo}\nIFSC: ${invoiceData.bankDetails.ifscCode}\nPhonePe / UPI: ${invoiceData.bankDetails.phonePe || '9414255366'}`;
+    const billLine = invoiceData.billNumber ? `*Bill No.:* ${invoiceData.billNumber}\n` : '';
+    return `*TAX INVOICE - RAMSWAROOP NIRMAL KUMAR AJMERA*\nSadar Bazar, Banera (Rajasthan)\nGSTIN: 08ACZPA7669Q1ZC\n\n${billLine}*Bill To:* ${invoiceData.customer.name || 'Customer'}\n*Date:* ${invoiceData.invoiceDate}\n*Total Amount:* ₹${formatCurrency(total)}\n\n*Bank Details:*\nBank: ${invoiceData.bankDetails.bankName}\nA/C: ${invoiceData.bankDetails.accountNo}\nIFSC: ${invoiceData.bankDetails.ifscCode}\nPhonePe / UPI: ${invoiceData.bankDetails.phonePe || '9414255366'}`;
   };
 
   const handleShareWhatsApp = () => {
@@ -495,8 +445,17 @@ export default function App() {
               onClick={handleSharePdf}
               disabled={isProcessing}
             >
-              <Share2 size={17} />
-              <span>Share PDF</span>
+              {isProcessing && processAction === 'share' ? (
+                <>
+                  <div className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }}></div>
+                  <span>Sharing...</span>
+                </>
+              ) : (
+                <>
+                  <Share2 size={17} />
+                  <span>Share PDF</span>
+                </>
+              )}
             </button>
             <button
               type="button"
@@ -504,8 +463,17 @@ export default function App() {
               onClick={handleDownloadPdf}
               disabled={isProcessing}
             >
-              <Download size={17} />
-              <span>Download</span>
+              {isProcessing && processAction === 'download' ? (
+                <>
+                  <div className="spinner" style={{ width: 14, height: 14, borderWidth: 2, borderColor: '#fff', borderTopColor: 'transparent' }}></div>
+                  <span>Saving...</span>
+                </>
+              ) : (
+                <>
+                  <Download size={17} />
+                  <span>Download</span>
+                </>
+              )}
             </button>
           </>
         ) : (
@@ -524,8 +492,17 @@ export default function App() {
               onClick={handleSharePdf}
               disabled={isProcessing}
             >
-              <Share2 size={17} />
-              <span>Share PDF</span>
+              {isProcessing && processAction === 'share' ? (
+                <>
+                  <div className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }}></div>
+                  <span>Sharing...</span>
+                </>
+              ) : (
+                <>
+                  <Share2 size={17} />
+                  <span>Share PDF</span>
+                </>
+              )}
             </button>
             <button
               type="button"
@@ -533,11 +510,25 @@ export default function App() {
               onClick={handleDownloadPdf}
               disabled={isProcessing}
             >
-              <Download size={17} />
-              <span>Download</span>
+              {isProcessing && processAction === 'download' ? (
+                <>
+                  <div className="spinner" style={{ width: 14, height: 14, borderWidth: 2, borderColor: '#fff', borderTopColor: 'transparent' }}></div>
+                  <span>Saving...</span>
+                </>
+              ) : (
+                <>
+                  <Download size={17} />
+                  <span>Download</span>
+                </>
+              )}
             </button>
           </>
         )}
+      </div>
+
+      {/* Offscreen dedicated container for pristine A4 PDF generation without affecting screen view */}
+      <div id="invoice-capture-vault" className="invoice-capture-vault" aria-hidden="true">
+        <InvoicePreview invoiceData={invoiceData} id="invoice-sheet-capture" />
       </div>
 
       {/* Share Modal for desktop / multi-platform fallback */}

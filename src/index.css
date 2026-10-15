@@ -1379,6 +1379,48 @@ body {
 }
 
 /* ==========================================================================
+   OFFSCREEN CAPTURE VAULT - PRISTINE A4 CAPTURE INDEPENDENT OF SCREEN VIEWPORT
+   ========================================================================== */
+.invoice-capture-vault {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 794px !important;
+  min-width: 794px !important;
+  max-width: 794px !important;
+  height: auto !important;
+  z-index: -99999 !important;
+  opacity: 1 !important;
+  pointer-events: none !important;
+  visibility: visible !important;
+  transform: none !important;
+  zoom: 1 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  background-color: #ffffff !important;
+  box-sizing: border-box !important;
+}
+
+.invoice-capture-vault .invoice-preview-wrapper {
+  padding: 0 !important;
+  margin: 0 !important;
+  width: 794px !important;
+  max-width: 794px !important;
+  box-sizing: border-box !important;
+}
+
+.invoice-capture-vault .invoice-a4-sheet {
+  width: 794px !important;
+  min-width: 794px !important;
+  max-width: 794px !important;
+  box-shadow: none !important;
+  margin: 0 !important;
+  zoom: 1 !important;
+  transform: none !important;
+  box-sizing: border-box !important;
+}
+
+/* ==========================================================================
    PRINT STYLES FOR CRISP 100% VECTOR A4 PRINT / SAVE AS PDF
    ========================================================================== */
 
@@ -1395,7 +1437,8 @@ body {
   .mobile-bottom-bar,
   .editor-panel,
   .preview-top-toolbar,
-  .toast-notification {
+  .toast-notification,
+  .invoice-capture-vault {
     display: none !important;
   }
 

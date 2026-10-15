@@ -2,7 +2,7 @@ import React, { forwardRef } from 'react';
 import { formatCurrency, formatDateToIndian } from '../utils/formatters';
 import { numberToIndianWords } from '../utils/numberToWords';
 
-const InvoicePreview = forwardRef(({ invoiceData }, ref) => {
+const InvoicePreview = forwardRef(({ invoiceData, id = 'invoice-sheet' }, ref) => {
   const { customer, items, bankDetails } = invoiceData;
 
   // Calculate totals
@@ -49,7 +49,7 @@ const InvoicePreview = forwardRef(({ invoiceData }, ref) => {
       <div
         className="invoice-a4-sheet"
         ref={ref}
-        id="invoice-sheet"
+        id={id}
       >
         {/* Top Centered Title */}
         <div className="tax-invoice-title">TAX INVOICE</div>
@@ -132,7 +132,7 @@ const InvoicePreview = forwardRef(({ invoiceData }, ref) => {
                 <div className="detail-row">
                   <span className="detail-label">Bill No.:</span>
                   <span className="detail-value" style={{ fontWeight: 700 }}>
-                    {invoiceData.billNumber || 19}
+                    {invoiceData.billNumber ?? ''}
                   </span>
                 </div>
                 <div className="detail-row">

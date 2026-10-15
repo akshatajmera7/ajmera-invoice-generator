@@ -30,16 +30,17 @@ export default function InvoiceForm({
         <div className="card-body">
           <div className="form-grid form-grid-3">
             <div className="form-group">
-              <label htmlFor="billNumber">Bill No.</label>
+              <label htmlFor="billNumber">
+                Bill No. <span className="label-badge">Optional</span>
+              </label>
               <input
                 id="billNumber"
-                type="number"
+                type="text"
                 className="form-input"
-                value={invoiceData.billNumber || ''}
-                onChange={(e) => onUpdateInvoice('billNumber', parseInt(e.target.value, 10) || 1)}
-                placeholder="19"
+                value={invoiceData.billNumber ?? ''}
+                onChange={(e) => onUpdateInvoice('billNumber', e.target.value)}
+                placeholder="e.g. 19 (optional)"
                 inputMode="numeric"
-                min="1"
               />
             </div>
             <div className="form-group">
