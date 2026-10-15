@@ -19,8 +19,20 @@ import {
   Check
 } from 'lucide-react';
 
+const STARTING_BILL_NUMBER = 19;
+
+const getNextBillNumber = () => {
+  try {
+    const stored = localStorage.getItem('ajmera_last_bill_number');
+    return stored ? parseInt(stored, 10) + 1 : STARTING_BILL_NUMBER;
+  } catch {
+    return STARTING_BILL_NUMBER;
+  }
+};
+
 const DEFAULT_INVOICE_DATA = {
   invoiceDate: getTodayDateInput(),
+  billNumber: STARTING_BILL_NUMBER,
   placeOfSupply: 'Rajasthan',
   customer: {
     name: '',
@@ -57,6 +69,7 @@ export default function App() {
         const parsed = JSON.parse(saved);
         return {
           ...parsed,
+          billNumber: parsed.billNumber ?? getNextBillNumber(),
           bankDetails: {
             ...DEFAULT_INVOICE_DATA.bankDetails,
             ...(parsed.bankDetails || {}),
@@ -66,7 +79,7 @@ export default function App() {
     } catch {
       // ignore
     }
-    return DEFAULT_INVOICE_DATA;
+    return { ...DEFAULT_INVOICE_DATA, billNumber: getNextBillNumber() };
   });
 
   const [isProcessing, setIsProcessing] = useState(false);
@@ -270,6 +283,15 @@ export default function App() {
     return pdf.output('blob');
   };
 
+  // Increment bill number after finalising a bill
+  const incrementBillNumber = () => {
+    const next = (invoiceData.billNumber || STARTING_BILL_NUMBER) + 1;
+    try {
+      localStorage.setItem('ajmera_last_bill_number', String(invoiceData.billNumber || STARTING_BILL_NUMBER));
+    } catch { /* ignore */ }
+    saveState({ ...invoiceData, billNumber: next });
+  };
+
   // Download PDF
   const handleDownloadPdf = async () => {
     try {
@@ -293,7 +315,8 @@ export default function App() {
         URL.revokeObjectURL(blobUrl);
       }, 3000);
 
-      showToast(`Downloaded ${fileName}`);
+      showToast(`Downloaded — Bill #${invoiceData.billNumber}`);
+      incrementBillNumber();
     } catch (err) {
       console.error('PDF error:', err);
       showToast('Error generating PDF. Please try again.');
@@ -322,6 +345,7 @@ export default function App() {
           text: `Tax Invoice for ${invoiceData.customer.name || 'Goods'} from Ramswaroop Nirmal Kumar Ajmera.`,
         });
         showToast('Shared successfully!');
+        incrementBillNumber();
       } else {
         // Fallback for browsers that don't support direct file sharing via navigator:
         // 1. Trigger the download so user has the file

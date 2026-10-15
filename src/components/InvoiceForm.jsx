@@ -24,11 +24,24 @@ export default function InvoiceForm({
         <div className="card-header">
           <div className="card-title-group">
             <Building2 size={18} className="card-icon" />
-            <h2 className="card-title">Invoice Date & Place</h2>
+            <h2 className="card-title">Invoice Details</h2>
           </div>
         </div>
         <div className="card-body">
-          <div className="form-grid form-grid-2">
+          <div className="form-grid form-grid-3">
+            <div className="form-group">
+              <label htmlFor="billNumber">Bill No.</label>
+              <input
+                id="billNumber"
+                type="number"
+                className="form-input"
+                value={invoiceData.billNumber || ''}
+                onChange={(e) => onUpdateInvoice('billNumber', parseInt(e.target.value, 10) || 1)}
+                placeholder="19"
+                inputMode="numeric"
+                min="1"
+              />
+            </div>
             <div className="form-group">
               <label htmlFor="invoiceDate">Invoice Date</label>
               <input
@@ -203,9 +216,7 @@ export default function InvoiceForm({
                   <div className="item-row-header">
                     <span className="item-index-badge">Item #{index + 1}</span>
                     <div className="item-row-summary-chips">
-                      <span className="chip chip-sub">₹{formatCurrency(taxable)}</span>
-                      <span className="chip chip-tax">+5% GST</span>
-                      <span className="chip chip-total">Total: ₹{formatCurrency(total)}</span>
+                      <span className="chip chip-sub">Amount: ₹{formatCurrency(taxable)}</span>
                     </div>
                     {items.length > 1 && (
                       <button

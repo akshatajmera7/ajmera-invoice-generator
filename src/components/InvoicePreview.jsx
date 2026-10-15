@@ -12,15 +12,10 @@ const InvoicePreview = forwardRef(({ invoiceData }, ref) => {
   const calculatedItems = items.map((item, index) => {
     const qty = parseFloat(item.quantity) || 0;
     const rate = parseFloat(item.price) || 0;
-    const taxable = qty * rate;
-    // 2.5% CGST + 2.5% SGST = 5.0% Total GST
-    const cgst = taxable * 0.025;
-    const sgst = taxable * 0.025;
-    const gstTotal = cgst + sgst;
-    const amount = taxable + gstTotal;
+    const itemAmount = qty * rate; // Clean item amount without GST
 
     totalQty += qty;
-    totalTaxable += taxable;
+    totalTaxable += itemAmount;
 
     return {
       sr: index + 1,
@@ -28,14 +23,11 @@ const InvoicePreview = forwardRef(({ invoiceData }, ref) => {
       quantity: qty,
       unit: item.unit || 'Pcs',
       price: rate,
-      taxable,
-      cgst,
-      sgst,
-      gstTotal,
-      amount,
+      amount: itemAmount,
     };
   });
 
+  // GST added later on below the main items table (2.5% CGST + 2.5% SGST)
   const totalCgst = totalTaxable * 0.025;
   const totalSgst = totalTaxable * 0.025;
   const totalTax = totalCgst + totalSgst;
@@ -138,6 +130,12 @@ const InvoicePreview = forwardRef(({ invoiceData }, ref) => {
               <div className="sub-box-title">Invoice Details:</div>
               <div className="sub-box-content details-content">
                 <div className="detail-row">
+                  <span className="detail-label">Bill No.:</span>
+                  <span className="detail-value" style={{ fontWeight: 700 }}>
+                    {invoiceData.billNumber || 19}
+                  </span>
+                </div>
+                <div className="detail-row">
                   <span className="detail-label">Date:</span>
                   <span className="detail-value">
                     {formatDateToIndian(invoiceData.invoiceDate)}
@@ -151,7 +149,7 @@ const InvoicePreview = forwardRef(({ invoiceData }, ref) => {
             </div>
           </div>
 
-          {/* Items Table */}
+          {/* Items Table (GST Column Removed - GST Added Below Table) */}
           <div className="invoice-table-container">
             <table className="invoice-items-table">
               <thead>
@@ -161,7 +159,6 @@ const InvoicePreview = forwardRef(({ invoiceData }, ref) => {
                   <th className="col-qty">Quantity</th>
                   <th className="col-unit">Unit</th>
                   <th className="col-price">Price/ Unit(Rs)</th>
-                  <th className="col-gst">GST(Rs)</th>
                   <th className="col-amt">Amount(Rs)</th>
                 </tr>
               </thead>
@@ -173,10 +170,6 @@ const InvoicePreview = forwardRef(({ invoiceData }, ref) => {
                     <td className="col-qty">{item.quantity || '-'}</td>
                     <td className="col-unit">{item.unit || 'Pcs'}</td>
                     <td className="col-price">Rs. {formatCurrency(item.price)}</td>
-                    <td className="col-gst">
-                      <div>Rs. {formatCurrency(item.gstTotal)}</div>
-                      <div className="gst-subtext">(5%)</div>
-                    </td>
                     <td className="col-amt">Rs. {formatCurrency(item.amount)}</td>
                   </tr>
                 ))}
@@ -188,7 +181,6 @@ const InvoicePreview = forwardRef(({ invoiceData }, ref) => {
                     <td className="col-qty">&nbsp;</td>
                     <td className="col-unit">&nbsp;</td>
                     <td className="col-price">&nbsp;</td>
-                    <td className="col-gst">&nbsp;</td>
                     <td className="col-amt">&nbsp;</td>
                   </tr>
                 ))}
@@ -199,14 +191,13 @@ const InvoicePreview = forwardRef(({ invoiceData }, ref) => {
                   <td className="col-qty bold-val">{totalQty > 0 ? totalQty : 1}</td>
                   <td className="col-unit"></td>
                   <td className="col-price"></td>
-                  <td className="col-gst bold-val">Rs. {formatCurrency(totalTax)}</td>
-                  <td className="col-amt bold-val">Rs. {formatCurrency(grandTotal)}</td>
+                  <td className="col-amt bold-val">Rs. {formatCurrency(totalTaxable)}</td>
                 </tr>
               </tbody>
             </table>
           </div>
 
-          {/* Tax Summary & Totals Section */}
+          {/* Tax Summary & Totals Section - Where GST is Added */}
           <div className="invoice-bottom-split">
             {/* Left Column: Tax Summary */}
             <div className="tax-summary-box">
@@ -237,7 +228,7 @@ const InvoicePreview = forwardRef(({ invoiceData }, ref) => {
               </table>
             </div>
 
-            {/* Right Column: Totals */}
+            {/* Right Column: Totals (Sub Total + CGST + SGST = Grand Total) */}
             <div className="totals-box">
               <div className="totals-row">
                 <span className="totals-label">Sub Total :</span>
