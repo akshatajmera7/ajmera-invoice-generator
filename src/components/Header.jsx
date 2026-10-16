@@ -1,7 +1,7 @@
 import React from 'react';
 import { Download, Share2, RotateCcw } from 'lucide-react';
 
-export default function Header({ onDownloadPdf, onSharePdf, onReset, isProcessing, processAction }) {
+export default function Header({ onDownloadPdf, onSharePdf, onReset, isProcessing, processAction, isOutOfRajasthan }) {
   return (
     <header className="app-header">
       <div className="header-brand">
@@ -10,7 +10,11 @@ export default function Header({ onDownloadPdf, onSharePdf, onReset, isProcessin
         </div>
         <div className="header-title-block">
           <h1 className="header-company">RAMSWAROOP NIRMAL KUMAR AJMERA</h1>
-          <p className="header-subtitle">Official GST Tax Invoice (2.5% CGST + 2.5% SGST)</p>
+          <p className="header-subtitle">
+            {isOutOfRajasthan
+              ? 'Official GST Tax Invoice (5.0% IGST • Out of Rajasthan)'
+              : 'Official GST Tax Invoice (2.5% CGST + 2.5% SGST)'}
+          </p>
         </div>
       </div>
 

@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import Header from './components/Header';
 import InvoiceForm from './components/InvoiceForm';
 import InvoicePreview from './components/InvoicePreview';
-import { getTodayDateInput, formatCurrency } from './utils/formatters';
+import { getTodayDateInput, formatCurrency, formatDateToIndian, isOutOfRajasthan } from './utils/formatters';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import {
@@ -33,6 +33,7 @@ const getNextBillNumber = () => {
 const DEFAULT_INVOICE_DATA = {
   invoiceDate: getTodayDateInput(),
   billNumber: STARTING_BILL_NUMBER,
+  taxType: 'intra_state', // 'intra_state' (Rajasthan) | 'inter_state' (Out of Rajasthan)
   placeOfSupply: 'Rajasthan',
   customer: {
     name: '',
@@ -188,61 +189,74 @@ export default function App() {
 
   // Generate pristine A4 PDF object using dedicated offscreen capture vault
   const generatePdf = async () => {
-    // 1. Get the dedicated offscreen A4 capture sheet
-    const captureSheet = document.getElementById('invoice-sheet-capture');
-    if (!captureSheet) {
-      throw new Error('Invoice capture container not ready. Please try again.');
+    // 1. Get the dedicated offscreen A4 capture vault
+    const vault = document.getElementById('invoice-capture-vault');
+    if (!vault) {
+      throw new Error('Invoice capture vault not found. Please try again.');
     }
 
-    // 2. Ensure firm logo image is loaded if present
-    const logoImg = captureSheet.querySelector('.invoice-firm-logo');
-    if (logoImg && !logoImg.complete) {
-      await new Promise((resolve) => {
-        logoImg.onload = resolve;
-        logoImg.onerror = resolve;
+    // Activate capture vault strictly during render
+    vault.classList.add('vault-active');
+
+    try {
+      const captureSheet = document.getElementById('invoice-sheet-capture');
+      if (!captureSheet) {
+        throw new Error('Invoice capture container not ready. Please try again.');
+      }
+
+      // 2. Ensure firm logo image is loaded if present
+      const logoImg = captureSheet.querySelector('.invoice-firm-logo');
+      if (logoImg && !logoImg.complete) {
+        await new Promise((resolve) => {
+          logoImg.onload = resolve;
+          logoImg.onerror = resolve;
+        });
+      }
+
+      // Brief settle time for complete layout and font rasterization
+      await new Promise((r) => requestAnimationFrame(r));
+      await new Promise((r) => setTimeout(r, 80));
+
+      // 3. Capture high-res canvas at exactly standard A4 width (794px at 96 DPI)
+      const targetWidth = 794;
+      const targetHeight = captureSheet.scrollHeight || captureSheet.offsetHeight || 1123;
+
+      const canvas = await html2canvas(captureSheet, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+        scrollX: 0,
+        scrollY: 0,
+        x: 0,
+        y: 0,
+        width: targetWidth,
+        height: targetHeight,
+        windowWidth: targetWidth,
+        windowHeight: targetHeight,
       });
+
+      if (!canvas || canvas.width === 0 || canvas.height === 0) {
+        throw new Error('Canvas capture returned empty. Please try again.');
+      }
+
+      // 4. Construct A4 PDF with jsPDF
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+      const pdfWidth = pdf.internal.pageSize.getWidth(); // 210mm
+      const pdfHeight = (canvas.height / canvas.width) * pdfWidth;
+
+      if (!isFinite(pdfHeight) || pdfHeight <= 0) {
+        throw new Error('Could not compute PDF dimensions. Please try again.');
+      }
+
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight, undefined, 'FAST');
+      return pdf;
+    } finally {
+      vault.classList.remove('vault-active');
     }
-
-    // Brief rAF to ensure complete font and layout settling
-    await new Promise((r) => requestAnimationFrame(r));
-
-    // 3. Capture high-res canvas at exactly standard A4 width (794px at 96 DPI)
-    const targetWidth = 794;
-    const targetHeight = captureSheet.scrollHeight || captureSheet.offsetHeight || 1123;
-
-    const canvas = await html2canvas(captureSheet, {
-      scale: 2,
-      useCORS: true,
-      allowTaint: true,
-      backgroundColor: '#ffffff',
-      logging: false,
-      scrollX: 0,
-      scrollY: 0,
-      x: 0,
-      y: 0,
-      width: targetWidth,
-      height: targetHeight,
-      windowWidth: targetWidth,
-      windowHeight: targetHeight,
-    });
-
-    if (!canvas || canvas.width === 0 || canvas.height === 0) {
-      throw new Error('Canvas capture returned empty. Please try again.');
-    }
-
-    // 4. Construct A4 PDF with jsPDF
-    const imgData = canvas.toDataURL('image/png');
-    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-
-    const pdfWidth = pdf.internal.pageSize.getWidth(); // 210mm
-    const pdfHeight = (canvas.height / canvas.width) * pdfWidth;
-
-    if (!isFinite(pdfHeight) || pdfHeight <= 0) {
-      throw new Error('Could not compute PDF dimensions. Please try again.');
-    }
-
-    pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight, undefined, 'FAST');
-    return pdf;
   };
 
   // Increment bill number after finalising a bill (only if a valid numeric bill number was provided)
@@ -325,9 +339,20 @@ export default function App() {
   };
 
   const getShareText = () => {
-    const total = calculateTotal();
+    const outOfRaj = isOutOfRajasthan(invoiceData);
+    const taxable = invoiceData.items.reduce((sum, item) => {
+      const q = parseFloat(item.quantity) || 0;
+      const p = parseFloat(item.price) || 0;
+      return sum + q * p;
+    }, 0);
+    const tax = taxable * 0.05;
+    const total = taxable + tax;
     const billLine = invoiceData.billNumber ? `*Bill No.:* ${invoiceData.billNumber}\n` : '';
-    return `*TAX INVOICE - RAMSWAROOP NIRMAL KUMAR AJMERA*\nSadar Bazar, Banera (Rajasthan)\nGSTIN: 08ACZPA7669Q1ZC\n\n${billLine}*Bill To:* ${invoiceData.customer.name || 'Customer'}\n*Date:* ${invoiceData.invoiceDate}\n*Total Amount:* ₹${formatCurrency(total)}\n\n*Bank Details:*\nBank: ${invoiceData.bankDetails.bankName}\nA/C: ${invoiceData.bankDetails.accountNo}\nIFSC: ${invoiceData.bankDetails.ifscCode}\nPhonePe / UPI: ${invoiceData.bankDetails.phonePe || '9414255366'}`;
+    const taxLine = outOfRaj
+      ? `*IGST (5%):* ₹${formatCurrency(tax)} (Inter-State Out of Rajasthan)`
+      : `*CGST (2.5%):* ₹${formatCurrency(taxable * 0.025)}\n*SGST (2.5%):* ₹${formatCurrency(taxable * 0.025)}`;
+
+    return `*TAX INVOICE - RAMSWAROOP NIRMAL KUMAR AJMERA*\nSadar Bazar, Banera (Rajasthan)\nGSTIN: 08ACZPA7669Q1ZC\n\n${billLine}*Bill To:* ${invoiceData.customer.name || 'Customer'}\n*Date:* ${formatDateToIndian(invoiceData.invoiceDate)}\n*Place of Supply:* ${invoiceData.placeOfSupply || (outOfRaj ? 'Out of Rajasthan' : 'Rajasthan')}\n*Taxable Amount:* ₹${formatCurrency(taxable)}\n${taxLine}\n*Total Amount:* ₹${formatCurrency(total)}\n\n*Bank Details:*\nBank: ${invoiceData.bankDetails.bankName}\nA/C: ${invoiceData.bankDetails.accountNo}\nIFSC: ${invoiceData.bankDetails.ifscCode}\nPhonePe / UPI: ${invoiceData.bankDetails.phonePe || '9414255366'}`;
   };
 
   const handleShareWhatsApp = () => {
@@ -348,6 +373,8 @@ export default function App() {
     showToast('Invoice summary copied to clipboard!');
   };
 
+  const isInterState = isOutOfRajasthan(invoiceData);
+
   return (
     <div className="app-layout">
       {/* Top Header */}
@@ -357,6 +384,7 @@ export default function App() {
         onReset={handleReset}
         isProcessing={isProcessing}
         processAction={processAction}
+        isOutOfRajasthan={isInterState}
       />
 
       {/* Mobile Top Tabs */}
@@ -605,6 +633,21 @@ export default function App() {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Fullscreen loading overlay while generating PDF */}
+      {isProcessing && (
+        <div className="pdf-generation-overlay" aria-live="assertive">
+          <div className="pdf-generation-card">
+            <div className="pdf-spinner"></div>
+            <h4>
+              {processAction === 'share'
+                ? 'Preparing Tax Invoice for Sharing...'
+                : 'Generating Official Tax Invoice PDF...'}
+            </h4>
+            <p>Creating pixel-perfect A4 tax invoice, please wait a moment...</p>
           </div>
         </div>
       )}

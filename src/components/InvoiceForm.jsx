@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Plus, Trash2, Building2, User, ShoppingBag, CreditCard, ChevronDown, ChevronUp } from 'lucide-react';
-import { formatCurrency } from '../utils/formatters';
+import { Plus, Trash2, Building2, User, ShoppingBag, CreditCard, ChevronDown, ChevronUp, MapPin, Globe } from 'lucide-react';
+import { formatCurrency, isOutOfRajasthan, INDIAN_STATES } from '../utils/formatters';
 
 const COMMON_UNITS = ['Pcs', 'Mtr', 'Kg', 'Box', 'Set', 'Nos', 'Roll', 'Thaan', 'Pkt'];
 
@@ -16,6 +16,48 @@ export default function InvoiceForm({
   const [showBankDetails, setShowBankDetails] = useState(true);
 
   const { customer, items, bankDetails } = invoiceData;
+  const outOfRaj = isOutOfRajasthan(invoiceData);
+
+  const handleTaxModeSelect = (isInterState) => {
+    if (isInterState) {
+      onUpdateInvoice('taxType', 'inter_state');
+      if (!invoiceData.placeOfSupply || invoiceData.placeOfSupply.trim().toLowerCase() === 'rajasthan') {
+        onUpdateInvoice('placeOfSupply', '');
+      }
+    } else {
+      onUpdateInvoice('taxType', 'intra_state');
+      onUpdateInvoice('placeOfSupply', 'Rajasthan');
+      if (!customer.state || customer.state.trim().toLowerCase() !== 'rajasthan') {
+        onUpdateCustomer('state', 'Rajasthan');
+      }
+    }
+  };
+
+  const handlePlaceOfSupplyChange = (val) => {
+    onUpdateInvoice('placeOfSupply', val);
+    const cleaned = val.trim().toLowerCase();
+    if (cleaned === 'rajasthan') {
+      onUpdateInvoice('taxType', 'intra_state');
+    } else if (cleaned) {
+      onUpdateInvoice('taxType', 'inter_state');
+    }
+  };
+
+  const handleCustomerStateChange = (val) => {
+    onUpdateCustomer('state', val);
+    const cleaned = val.trim().toLowerCase();
+    if (cleaned === 'rajasthan') {
+      if (!invoiceData.placeOfSupply || invoiceData.placeOfSupply.trim().toLowerCase() !== 'rajasthan') {
+        onUpdateInvoice('placeOfSupply', 'Rajasthan');
+      }
+      onUpdateInvoice('taxType', 'intra_state');
+    } else if (cleaned) {
+      if (!invoiceData.placeOfSupply || invoiceData.placeOfSupply.trim().toLowerCase() === 'rajasthan') {
+        onUpdateInvoice('placeOfSupply', val);
+      }
+      onUpdateInvoice('taxType', 'inter_state');
+    }
+  };
 
   return (
     <div className="invoice-form-container">
@@ -28,6 +70,51 @@ export default function InvoiceForm({
           </div>
         </div>
         <div className="card-body">
+          {/* Tax Mode Selector (Rajasthan Intra-State vs Out of Rajasthan Inter-State) */}
+          <div className="tax-mode-container">
+            <div className="tax-mode-header">
+              <label className="tax-mode-label">Tax Type & Place of Supply</label>
+              <span className={`tax-mode-current-badge ${outOfRaj ? 'badge-igst' : 'badge-cgst'}`}>
+                {outOfRaj ? '5.0% IGST Applied' : '2.5% CGST + 2.5% SGST Applied'}
+              </span>
+            </div>
+            <div className="tax-mode-toggle-group">
+              <button
+                type="button"
+                className={`tax-mode-btn ${!outOfRaj ? 'active' : ''}`}
+                onClick={() => handleTaxModeSelect(false)}
+              >
+                <div className="tax-mode-radio-circle">
+                  {!outOfRaj && <div className="tax-mode-radio-inner" />}
+                </div>
+                <div className="tax-mode-btn-content">
+                  <div className="tax-mode-title-row">
+                    <MapPin size={14} className="tax-mode-icon" />
+                    <strong>Within Rajasthan</strong>
+                  </div>
+                  <small className="tax-mode-sub">CGST (2.5%) + SGST (2.5%)</small>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                className={`tax-mode-btn ${outOfRaj ? 'active' : ''}`}
+                onClick={() => handleTaxModeSelect(true)}
+              >
+                <div className="tax-mode-radio-circle">
+                  {outOfRaj && <div className="tax-mode-radio-inner" />}
+                </div>
+                <div className="tax-mode-btn-content">
+                  <div className="tax-mode-title-row">
+                    <Globe size={14} className="tax-mode-icon" />
+                    <strong>Out of Rajasthan</strong>
+                  </div>
+                  <small className="tax-mode-sub">IGST 5.0% (Inter-State)</small>
+                </div>
+              </button>
+            </div>
+          </div>
+
           <div className="form-grid form-grid-3">
             <div className="form-group">
               <label htmlFor="billNumber">
@@ -55,14 +142,17 @@ export default function InvoiceForm({
             </div>
 
             <div className="form-group">
-              <label htmlFor="placeOfSupply">Place Of Supply</label>
+              <label htmlFor="placeOfSupply">
+                Place Of Supply {outOfRaj && <span className="label-badge label-badge-highlight">Outside RJ</span>}
+              </label>
               <input
                 id="placeOfSupply"
                 type="text"
+                list="indian-states-list"
                 className="form-input"
                 value={invoiceData.placeOfSupply}
-                onChange={(e) => onUpdateInvoice('placeOfSupply', e.target.value)}
-                placeholder="Rajasthan"
+                onChange={(e) => handlePlaceOfSupplyChange(e.target.value)}
+                placeholder={outOfRaj ? "e.g. Gujarat, Delhi..." : "Rajasthan"}
               />
             </div>
           </div>
@@ -125,10 +215,11 @@ export default function InvoiceForm({
               <input
                 id="customerState"
                 type="text"
+                list="indian-states-list"
                 className="form-input"
                 value={customer.state}
-                onChange={(e) => onUpdateCustomer('state', e.target.value)}
-                placeholder="Rajasthan"
+                onChange={(e) => handleCustomerStateChange(e.target.value)}
+                placeholder={outOfRaj ? "e.g. Gujarat, Delhi..." : "Rajasthan"}
               />
             </div>
 
@@ -218,6 +309,9 @@ export default function InvoiceForm({
                     <span className="item-index-badge">Item #{index + 1}</span>
                     <div className="item-row-summary-chips">
                       <span className="chip chip-sub">Amount: ₹{formatCurrency(taxable)}</span>
+                      <span className="chip chip-tax">
+                        {outOfRaj ? `IGST (5%): ₹${formatCurrency(taxable * 0.05)}` : `GST (2.5%+2.5%): ₹${formatCurrency(taxable * 0.05)}`}
+                      </span>
                     </div>
                     {items.length > 1 && (
                       <button
@@ -292,6 +386,12 @@ export default function InvoiceForm({
           <datalist id="units-list">
             {COMMON_UNITS.map((u) => (
               <option key={u} value={u} />
+            ))}
+          </datalist>
+
+          <datalist id="indian-states-list">
+            {INDIAN_STATES.map((s) => (
+              <option key={s} value={s} />
             ))}
           </datalist>
 

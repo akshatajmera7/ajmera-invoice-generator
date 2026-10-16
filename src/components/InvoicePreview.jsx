@@ -1,9 +1,10 @@
 import React, { forwardRef } from 'react';
-import { formatCurrency, formatDateToIndian } from '../utils/formatters';
+import { formatCurrency, formatDateToIndian, isOutOfRajasthan } from '../utils/formatters';
 import { numberToIndianWords } from '../utils/numberToWords';
 
 const InvoicePreview = forwardRef(({ invoiceData, id = 'invoice-sheet' }, ref) => {
   const { customer, items, bankDetails } = invoiceData;
+  const outOfRaj = isOutOfRajasthan(invoiceData);
 
   // Calculate totals
   let totalQty = 0;
@@ -27,10 +28,13 @@ const InvoicePreview = forwardRef(({ invoiceData, id = 'invoice-sheet' }, ref) =
     };
   });
 
-  // GST added later on below the main items table (2.5% CGST + 2.5% SGST)
-  const totalCgst = totalTaxable * 0.025;
-  const totalSgst = totalTaxable * 0.025;
-  const totalTax = totalCgst + totalSgst;
+  // GST Calculation:
+  // If Out of Rajasthan: No CGST, No SGST; 5% IGST is added
+  // If Within Rajasthan: 2.5% CGST + 2.5% SGST
+  const totalCgst = outOfRaj ? 0 : totalTaxable * 0.025;
+  const totalSgst = outOfRaj ? 0 : totalTaxable * 0.025;
+  const totalIgst = outOfRaj ? totalTaxable * 0.05 : 0;
+  const totalTax = outOfRaj ? totalIgst : totalCgst + totalSgst;
   const grandTotal = totalTaxable + totalTax;
 
   const amountInWords = numberToIndianWords(grandTotal);
@@ -201,47 +205,83 @@ const InvoicePreview = forwardRef(({ invoiceData, id = 'invoice-sheet' }, ref) =
           <div className="invoice-bottom-split">
             {/* Left Column: Tax Summary */}
             <div className="tax-summary-box">
-              <div className="tax-summary-title">Tax Summary:</div>
+              <div className="tax-summary-title">
+                {outOfRaj ? 'Tax Summary (Inter-State):' : 'Tax Summary (Intra-State):'}
+              </div>
               <table className="tax-summary-table">
                 <thead>
-                  <tr>
-                    <th>Taxable amount (Rs)</th>
-                    <th>CGST (2.5%)</th>
-                    <th>SGST (2.5%)</th>
-                    <th>Total Tax (Rs)</th>
-                  </tr>
+                  {outOfRaj ? (
+                    <tr>
+                      <th>Taxable amount (Rs)</th>
+                      <th>IGST (5.0%)</th>
+                      <th>Total Tax (Rs)</th>
+                    </tr>
+                  ) : (
+                    <tr>
+                      <th>Taxable amount (Rs)</th>
+                      <th>CGST (2.5%)</th>
+                      <th>SGST (2.5%)</th>
+                      <th>Total Tax (Rs)</th>
+                    </tr>
+                  )}
                 </thead>
                 <tbody>
-                  <tr>
-                    <td className="num-cell">{formatCurrency(totalTaxable)}</td>
-                    <td className="num-cell">{formatCurrency(totalCgst)}</td>
-                    <td className="num-cell">{formatCurrency(totalSgst)}</td>
-                    <td className="num-cell">{formatCurrency(totalTax)}</td>
-                  </tr>
-                  <tr className="tax-total-line">
-                    <td className="bold-cell">TOTAL: {formatCurrency(totalTaxable)}</td>
-                    <td className="num-cell bold-cell">{formatCurrency(totalCgst)}</td>
-                    <td className="num-cell bold-cell">{formatCurrency(totalSgst)}</td>
-                    <td className="num-cell bold-cell">{formatCurrency(totalTax)}</td>
-                  </tr>
+                  {outOfRaj ? (
+                    <>
+                      <tr>
+                        <td className="num-cell">{formatCurrency(totalTaxable)}</td>
+                        <td className="num-cell">{formatCurrency(totalIgst)}</td>
+                        <td className="num-cell">{formatCurrency(totalTax)}</td>
+                      </tr>
+                      <tr className="tax-total-line">
+                        <td className="bold-cell">TOTAL: {formatCurrency(totalTaxable)}</td>
+                        <td className="num-cell bold-cell">{formatCurrency(totalIgst)}</td>
+                        <td className="num-cell bold-cell">{formatCurrency(totalTax)}</td>
+                      </tr>
+                    </>
+                  ) : (
+                    <>
+                      <tr>
+                        <td className="num-cell">{formatCurrency(totalTaxable)}</td>
+                        <td className="num-cell">{formatCurrency(totalCgst)}</td>
+                        <td className="num-cell">{formatCurrency(totalSgst)}</td>
+                        <td className="num-cell">{formatCurrency(totalTax)}</td>
+                      </tr>
+                      <tr className="tax-total-line">
+                        <td className="bold-cell">TOTAL: {formatCurrency(totalTaxable)}</td>
+                        <td className="num-cell bold-cell">{formatCurrency(totalCgst)}</td>
+                        <td className="num-cell bold-cell">{formatCurrency(totalSgst)}</td>
+                        <td className="num-cell bold-cell">{formatCurrency(totalTax)}</td>
+                      </tr>
+                    </>
+                  )}
                 </tbody>
               </table>
             </div>
 
-            {/* Right Column: Totals (Sub Total + CGST + SGST = Grand Total) */}
+            {/* Right Column: Totals */}
             <div className="totals-box">
               <div className="totals-row">
                 <span className="totals-label">Sub Total :</span>
                 <span className="totals-value">Rs. {formatCurrency(totalTaxable)}</span>
               </div>
-              <div className="totals-row">
-                <span className="totals-label">CGST (2.5%) :</span>
-                <span className="totals-value">Rs. {formatCurrency(totalCgst)}</span>
-              </div>
-              <div className="totals-row">
-                <span className="totals-label">SGST (2.5%) :</span>
-                <span className="totals-value">Rs. {formatCurrency(totalSgst)}</span>
-              </div>
+              {outOfRaj ? (
+                <div className="totals-row">
+                  <span className="totals-label">IGST (5.0%) :</span>
+                  <span className="totals-value">Rs. {formatCurrency(totalIgst)}</span>
+                </div>
+              ) : (
+                <>
+                  <div className="totals-row">
+                    <span className="totals-label">CGST (2.5%) :</span>
+                    <span className="totals-value">Rs. {formatCurrency(totalCgst)}</span>
+                  </div>
+                  <div className="totals-row">
+                    <span className="totals-label">SGST (2.5%) :</span>
+                    <span className="totals-value">Rs. {formatCurrency(totalSgst)}</span>
+                  </div>
+                </>
+              )}
               <div className="totals-row totals-grand-total">
                 <span className="totals-label">Total :</span>
                 <span className="totals-value">Rs. {formatCurrency(grandTotal)}</span>

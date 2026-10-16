@@ -47,6 +47,9 @@ body {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  background-color: var(--bg-main);
+  position: relative;
+  overflow-x: hidden;
   padding-bottom: 70px; /* Space for mobile bottom bar */
 }
 
@@ -380,6 +383,168 @@ body {
   padding: 0.1rem 0.45rem;
   border-radius: 4px;
   margin-left: 0.35rem;
+}
+
+.label-badge-highlight {
+  background-color: #fef3c7;
+  color: #b45309;
+  font-weight: 700;
+}
+
+/* ==========================================================================
+   TAX MODE SWITCHER (Within Rajasthan vs Out of Rajasthan)
+   ========================================================================== */
+.tax-mode-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.85rem 1rem;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border: 1.5px solid #cbd5e1;
+  border-radius: var(--radius-sm);
+  margin-bottom: 0.35rem;
+}
+
+.tax-mode-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.tax-mode-label {
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: #1e293b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.tax-mode-current-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.2rem 0.55rem;
+  border-radius: 20px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.badge-cgst {
+  background-color: #dbeafe;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+
+.badge-igst {
+  background-color: #fef3c7;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+
+.tax-mode-toggle-group {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.65rem;
+}
+
+@media (max-width: 500px) {
+  .tax-mode-toggle-group {
+    grid-template-columns: 1fr;
+  }
+}
+
+.tax-mode-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: var(--radius-sm);
+  border: 2px solid #cbd5e1;
+  background-color: #ffffff;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.18s ease;
+  user-select: none;
+}
+
+.tax-mode-btn:hover {
+  border-color: #94a3b8;
+  background-color: #f8fafc;
+  transform: translateY(-1px);
+}
+
+.tax-mode-btn.active {
+  border-color: #000000;
+  background-color: #0f172a;
+  color: #ffffff;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.12);
+}
+
+.tax-mode-radio-circle {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid #94a3b8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background-color: #ffffff;
+}
+
+.tax-mode-btn.active .tax-mode-radio-circle {
+  border-color: #10b981;
+}
+
+.tax-mode-radio-inner {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background-color: #10b981;
+}
+
+.tax-mode-btn-content {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.tax-mode-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.tax-mode-icon {
+  flex-shrink: 0;
+  color: #64748b;
+}
+
+.tax-mode-btn.active .tax-mode-icon {
+  color: #38bdf8;
+}
+
+.tax-mode-btn-content strong {
+  font-size: 0.86rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+
+.tax-mode-btn.active .tax-mode-btn-content strong {
+  color: #ffffff;
+}
+
+.tax-mode-sub {
+  font-size: 0.72rem;
+  color: #64748b;
+  margin-top: 3px;
+  font-weight: 500;
+}
+
+.tax-mode-btn.active .tax-mode-sub {
+  color: #cbd5e1;
 }
 
 .card-body {
@@ -1382,6 +1547,7 @@ body {
    OFFSCREEN CAPTURE VAULT - PRISTINE A4 CAPTURE INDEPENDENT OF SCREEN VIEWPORT
    ========================================================================== */
 .invoice-capture-vault {
+  display: none !important;
   position: fixed !important;
   top: 0 !important;
   left: 0 !important;
@@ -1390,15 +1556,21 @@ body {
   max-width: 794px !important;
   height: auto !important;
   z-index: -99999 !important;
-  opacity: 1 !important;
+  opacity: 0 !important;
   pointer-events: none !important;
-  visibility: visible !important;
+  visibility: hidden !important;
   transform: none !important;
   zoom: 1 !important;
   margin: 0 !important;
   padding: 0 !important;
   background-color: #ffffff !important;
   box-sizing: border-box !important;
+}
+
+.invoice-capture-vault.vault-active {
+  display: block !important;
+  opacity: 1 !important;
+  visibility: visible !important;
 }
 
 .invoice-capture-vault .invoice-preview-wrapper {
@@ -1418,6 +1590,71 @@ body {
   zoom: 1 !important;
   transform: none !important;
   box-sizing: border-box !important;
+}
+
+/* ==========================================================================
+   FULLSCREEN PDF GENERATION OVERLAY
+   ========================================================================== */
+.pdf-generation-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(15, 23, 42, 0.72);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999999;
+}
+
+.pdf-generation-card {
+  background-color: #ffffff;
+  padding: 2.2rem 2.5rem;
+  border-radius: var(--radius-md);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  max-width: 400px;
+  animation: fadeInPop 0.2s ease-out;
+}
+
+.pdf-spinner {
+  width: 38px;
+  height: 38px;
+  border: 3.5px solid #e2e8f0;
+  border-top-color: #000000;
+  border-radius: 50%;
+  animation: spin 0.75s linear infinite;
+  margin-bottom: 1.1rem;
+}
+
+.pdf-generation-card h4 {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #0f172a;
+  margin-bottom: 0.4rem;
+}
+
+.pdf-generation-card p {
+  font-size: 0.82rem;
+  color: #64748b;
+  line-height: 1.4;
+}
+
+@keyframes fadeInPop {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 /* ==========================================================================
