@@ -21,9 +21,10 @@ export default function Header({ onDownloadPdf, onSharePdf, onReset, isProcessin
       <div className="header-actions">
         <button
           type="button"
-          className="btn btn-secondary header-btn"
+          className="btn btn-secondary header-btn header-btn-reset"
           onClick={onReset}
           title="Reset all fields"
+          aria-label="Reset bill"
         >
           <RotateCcw size={15} />
           <span className="btn-label-desktop">Reset</span>

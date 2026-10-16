@@ -455,6 +455,33 @@ export default function App() {
         </div>
       </main>
 
+      {/* Mobile Running Total Banner on Editor view */}
+      {activeTab === 'editor' && (
+        <div className="mobile-running-total-bar">
+          <div className="running-total-left">
+            <span className="running-total-count">
+              {invoiceData.items.length} {invoiceData.items.length === 1 ? 'item' : 'items'}
+            </span>
+            <div className="running-total-price">
+              <span className="running-currency">₹</span>
+              <strong>{formatCurrency(calculateTotal())}</strong>
+              <small className="running-tax-tag">
+                {isInterState ? '5% IGST' : '2.5%+2.5% GST'}
+              </small>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="running-view-btn"
+            onClick={() => setActiveTab('preview')}
+            title="View invoice preview"
+          >
+            <span>View Bill</span>
+            <Eye size={15} />
+          </button>
+        </div>
+      )}
+
       {/* Mobile Bottom Fixed Action Bar */}
       <div className="mobile-bottom-bar">
         {activeTab === 'editor' ? (
